@@ -1,0 +1,32 @@
+- name: Create subnet group and RDS instance
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Create subnet group
+      community.aws.rds_subnet_group:
+        name: rds-subnet-group
+        description: My subnet group
+        region: ap-south-1
+        subnets:
+          - subnet-018e94eb4223700cb
+          - subnet-0ec88216f29c62350
+        state: present
+      register: subnet_result
+
+    - name: Create RDS instance
+      community.aws.rds_instance:
+        db_instance_identifier: demo-rds-instance
+        engine: mysql
+        db_instance_class: db.t2.micro
+        username: admin
+        password: 123456789
+        allocated_storage: 10
+        db_name: biryani
+        vpc_security_group_ids:
+          - sg-05dd5df12f53e304e
+        db_subnet_group_name: rds-subnet-group
+        state: present
+        region: ap-south-1
+      register: rds_result
+

@@ -1,0 +1,252 @@
+---
+- name: Create VPC and related components
+  hosts: localhost
+  gather_facts: no
+
+  vars:
+    region: "us-west-2"
+    vpc_cidr: "10.0.0.0/16"
+    public_subnet1_cidr: "10.0.1.0/24"
+    public_subnet2_cidr: "10.0.2.0/24"
+    private_subnet1_cidr: "10.0.3.0/24"
+    private_subnet2_cidr: "10.0.4.0/24"
+    az1: us-west-2a
+    az2: us-west-2c
+    target_group_port: 80
+    target_group_protocol: "HTTP"
+    target_group_name: "demo-tg"
+    security_groups_1: "public_security_group"
+    security_groups_2: "private_security_group"
+    asg_name: Demo-ASG
+    min_size: 1
+    max_size: 1
+    desired_capacity: 1
+    vpc_security_group_ids: 
+      - "{{ public_security_group }}"
+      - "{{ private_security_group }}"
+
+
+  tasks:
+    - name: Create VPC
+      ec2_vpc_net:
+        name: "my_vpc"
+        cidr_block: "{{ vpc_cidr }}"
+        region: "{{ region }}"
+        state: present
+      register: vpc
+
+    - name: Create public subnet 1
+      ec2_vpc_subnet:
+        state: present
+        vpc_id: "{{ vpc.vpc.id }}"
+        cidr: "{{ public_subnet1_cidr }}"
+        region: "{{ region }}"
+        az: "{{ az1 }}"
+        resource_tags:
+          Name: "public_subnet_1"
+      register: public_subnet_result_1
+
+    - name: Create public subnet 2
+      ec2_vpc_subnet:
+        state: present
+        vpc_id: "{{ vpc.vpc.id }}"
+        cidr: "{{ public_subnet2_cidr }}"
+        region: "{{ region }}"
+        az: "{{ az2 }}"
+        resource_tags:
+          Name: "public_subnet_2"
+      register: public_subnet_result_2
+
+    - name: Create private subnet 1
+      ec2_vpc_subnet:
+        state: present
+        vpc_id: "{{ vpc.vpc.id }}"
+        cidr: "{{ private_subnet1_cidr }}"
+        region: "{{ region }}"
+        az: "{{ az1 }}"
+        resource_tags:
+          Name: "private_subnet_1"
+      register: private_subnet_result_1
+
+    - name: Create private subnet 2
+      ec2_vpc_subnet:
+        state: present
+        vpc_id: "{{ vpc.vpc.id }}"
+        cidr: "{{ private_subnet2_cidr }}"
+        region: "{{ region }}"
+        az: "{{ az2 }}"
+        resource_tags:
+          Name: "private_subnet_2"
+      register: private_subnet_result_2
+
+    - name: Create internet gateway
+      ec2_vpc_igw:
+        state: present
+        region: "{{ region }}"
+        vpc_id: "{{ vpc.vpc.id }}"
+      register: internet_gateway
+
+    - name: Create route table
+      ec2_vpc_route_table:
+        vpc_id: "{{ vpc.vpc.id }}"
+        region: "{{ region }}"
+        subnets:
+          - "{{ public_subnet1_cidr }}"
+          - "{{ public_subnet2_cidr }}"
+        routes:
+          - dest: "0.0.0.0/0"
+            gateway_id: "{{ internet_gateway.gateway_id }}"
+        resource_tags:
+          Name: "public_route_table"
+      register: public_route_table
+
+    - name: Create route table
+      ec2_vpc_route_table:
+        vpc_id: "{{ vpc.vpc.id }}"
+        region: "{{ region }}"
+        subnets:
+          - "{{ private_subnet1_cidr }}"
+          - "{{ private_subnet2_cidr }}"
+        resource_tags:
+          Name: "private_route_table"
+      register: private_route_table
+
+    - name: Create security group for public subnet
+      ec2_group:
+        name: "public_security_group"
+        description: "Security group for public subnet"
+        vpc_id: "{{ vpc.vpc.id }}"
+        region: "{{ region }}"
+        rules:
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 80
+            to_port: 80
+            cidr_ip: 0.0.0.0/0
+        resource_tags:
+          Name: "public_security_group"
+      register: public_security_group
+
+    - name: Create security group for private subnet
+      ec2_group:
+        name: "private_security_group"
+        description: "Security group for private subnet"
+        vpc_id: "{{ vpc.vpc.id }}"
+        region: "{{ region }}"
+        rules:
+          - proto: tcp
+            from_port: 3306
+            to_port: 3306
+            cidr_ip: 0.0.0.0/0
+        resource_tags:
+          Name: "private_security_group"
+      register: private_security_group_result
+
+
+    - name: Create a Target Group
+      community.aws.elb_target_group:
+        name: demo-tg
+        port: 80
+        protocol: http
+        region: "{{ region }}"
+        vpc_id: "{{ vpc.vpc.id }}"
+        target_type: "instance"
+        state: present
+      register: tg
+    
+    - name: Create an ALB
+      amazon.aws.elb_application_lb:
+        name: "demo-alb"
+        state: present
+        region: "{{ region }}"
+        security_groups: "{{ security_groups_1 }}"
+        listeners:
+          - Protocol: HTTP
+            Port: 80
+            DefaultActions:
+              - Type: forward
+                TargetGroupName: demo-tg
+
+        subnets: 
+          - "{{ public_subnet_result_1.subnet.id }}"
+          - "{{ public_subnet_result_2.subnet.id }}"
+        tags:
+          Name: "demo-alb"
+      register: lb
+
+    - name: Create launch configuration
+      ec2_lc:
+        name: Demo-LC
+        image_id: ami-0df24e148fdb9f1d8
+        instance_type: t2.micro
+        key_name: Ansible
+        security_groups:
+          - "{{ security_groups_1 }}"
+        region: "{{ region }}"
+        assign_public_ip: true
+        user_data: |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+          yum install -y httpd mariadb-server
+          systemctl start httpd
+          systemctl enable httpd
+          usermod -a -G apache ec2-user
+          chown -R ec2-user:apache /var/www
+          chmod 2775 /var/www
+          find /var/www -type d -exec chmod 2775 {} \;
+          find /var/www -type f -exec chmod 0664 {} \;
+          yum install -y git
+          sudo git clone https://github.com/sharonraju143/AWS-Project.git /var/www/html
+
+      register: lc
+
+    - name: Create auto scaling group
+      amazon.aws.autoscaling_group:
+        name: Demo-ASG
+        launch_config_name: Demo-LC
+        vpc_zone_identifier: "{{ public_subnet_result_1.subnet.id }} , {{ public_subnet_result_2.subnet.id }}"
+        min_size: "{{ min_size }}"
+        max_size: "{{ max_size }}"
+        desired_capacity: "{{ desired_capacity }}"
+        tags:
+          - Name: Demo-ASG
+        region: "{{ region }}"
+      register: asg_result
+
+    - name: Create subnet group
+      community.aws.rds_subnet_group:
+        name: rds-subnet-group
+        description: My subnet group
+        region: "{{ region }}"
+        subnets:
+          - "{{ private_subnet_result_1.subnet.id }}"
+          - "{{ private_subnet_result_2.subnet.id }}"
+        state: present
+      register: subnet_result
+
+    - name: Create RDS instance
+      community.aws.rds_instance:
+        db_instance_identifier: demo-rds-instance
+        engine: mysql
+        db_instance_class: db.t2.micro
+        username: admin
+        password: 123456789
+        allocated_storage: 10
+        db_name: biryani
+        vpc_security_group_ids: "{{ private_security_group_result.group_id }}"
+        db_subnet_group_name: rds-subnet-group
+        state: present
+        region: "{{ region }}"
+      register: rds_result
+
+
+
+
+    
+
+
+    

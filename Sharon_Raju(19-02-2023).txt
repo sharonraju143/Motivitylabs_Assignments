@@ -1,0 +1,76 @@
+Employee Name: Rudraraju Sharon Raju
+Emp_id : MLI1185
+---------------------------------------------------------------------------------------------------------------------------------
+19-02-2023
+
+1. Write a shell script to get current date, time, user name and current working directory.
+Ans.
+sharon@sharon:~/Desktop/practice$ cat test.sh 
+#!/bin/bash
+date
+whoami
+pwd
+sharon@sharon:~/Desktop/practice$ bash test.sh
+Sun Feb 19 06:52:13 PM IST 2023
+sharon
+/home/sharon/Desktop/practice
+
+2. Write a Shell Script that adds two numbers if provided as the command Line Argument and if the two numbers are not entered it outputs an Error Message along with a one-Line of how-to use description.
+Ans.
+sharon@sharon:~/Desktop/practice$ cat test.sh 
+#!/bin/bash
+read a
+read b
+
+if sum=`expr $a + $b`;
+then
+echo "Sum is : $sum"
+else
+echo "Enter an integer not a Non-integer"
+sharon@sharon:~/Desktop/practice$ bash test.sh 
+1
+2
+Sum is : 3
+sharon@sharon:~/Desktop/practice$ bash test.sh 
+a
+b
+expr: non-integer argument
+Enter an integer not a Non-integer
+
+3. You needs to print a given Number say 10572, in reverse order using a Shell script such that the input is provided using command Line Argument only. If the input data is not provided as Command Line Argument, it should throw and error and should suggest, how to use the script. Write the script but before that tell me the algorithm that needs to be implemented here.
+Ans.
+sharon@sharon:~/Desktop/practice$ cat test.sh
+#!/bin/bash
+read n
+nor=0
+ron=0
+
+while [ $n -gt 0 ]
+do
+    nor=$(( $n % 10 ))
+    ron=$(( $ron * 10 + $nor ))
+    n=$(( $n / 10 ))
+done
+
+echo "Reverse number of entered digit is $ron"
+sharon@sharon:~/Desktop/practice$ bash test.sh 
+10572
+Reverse number of entered digit is 27501
+
+4. You are supposed to calculate a real number calculation directly from terminal and not any shell script. What will you do (say the real numbers are 7.56 and 2.453)? 
+Ans. 
+sharon@sharon:~/Desktop/practice$ echo 7.52 + 2.453 | bc
+9.973
+sharon@sharon:~/Desktop/practice$ echo 7.52 - 2.453 | bc
+5.067
+
+5. You are supposed to find the value of pi upto 100 places of decimal, what is the easiest way to get the result done.
+Ans.
+First install the package for pi -
+sudo apt install pi
+sharon@sharon:~/Desktop/practice$ pi 100
+3.14159265358979323846264338327950288419716
+9399375105820974944592307816406286208998628
+034825342117067
+sharon@sharon:~/Desktop/practice$ pi 25
+3.141592653589793238462643

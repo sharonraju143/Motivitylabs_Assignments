@@ -1,0 +1,155 @@
+ - name: Creating three-tier architecture  
+   hosts: localhost
+   tasks:
+     - name: create a VPC
+       ec2_vpc_net:
+         name: Demo_vpc
+         cidr_block: 10.0.0.0/16
+         region: ap-south-1
+         state: present
+         tenancy: default
+         aws_access_key: "AKIAQNO4WPHCHPWMJF4J"
+         aws_secret_key: "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"
+       register: vpc_result
+
+     - name: Create public subnet 1 in zone1
+       ec2_vpc_subnet:
+         state: present
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         region: ap-south-1
+         az: ap-south-1a
+         cidr: 10.0.1.0/24
+         map_public: yes
+         tags:
+           Name: Demo_Pub_Sub1
+
+     - name: Create public subnet 2 in zone2
+       ec2_vpc_subnet:
+         state: present
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         region: ap-south-1
+         az: ap-south-1b
+         cidr: 10.0.2.0/24
+         map_public: yes
+         tags:
+           Name: Demo_Pub_Sub2
+
+     - name: Create private subnet 1 in zone1
+       ec2_vpc_subnet:
+         state: present
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         region: ap-south-1
+         az: ap-south-1a
+         cidr: 10.0.3.0/24
+         tags:
+           Name: Demo__Pvt_Sub1
+
+
+
+     - name: Create private subnet 2 in zone2
+       ec2_vpc_subnet:
+         state: present
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         region: ap-south-1
+         az: ap-south-1b
+         cidr: 10.0.4.0/24
+         tags:
+           Name: Demo__Pvt_Sub2
+
+     - name: Internet gateway setup
+       ec2_vpc_igw:
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         state: present
+         region: ap-south-1
+         tags:
+           Name: Demo_igw
+       register: internet_gateway_result
+
+
+     - name: Set up public subnet route table
+       ec2_vpc_route_table:
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         region: ap-south-1
+         tags:
+           Name: Demo_Pub_RT
+         subnets:
+           - 10.0.1.0/24
+           - 10.0.2.0/24
+         routes:
+           - dest: 0.0.0.0/0
+             gateway_id: "{{ internet_gateway_result.gateway_id }}"
+
+
+
+     - name: Private Subnet Route Table
+       ec2_vpc_route_table:
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         region: ap-south-1
+         tags:
+           Name: Demo__Pvt_RT
+         subnets:
+          - 10.0.3.0/24
+          - 10.0.4.0/24
+
+     - name: creation of web server security group
+       amazon.aws.ec2_security_group:
+         name: Demo-Web-Server-SG
+         description: Demo-Web-Server-SG
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         region: ap-south-1
+         rules:
+           - proto: tcp
+             from_port: 80
+             to_port: 80
+             cidr_ip: 0.0.0.0/0
+           - proto: tcp
+             from_port: 22
+             to_port: 22
+             cidr_ip: 0.0.0.0/0
+       register: sg_web_server_result
+
+
+     - name: creation of rds security group
+       amazon.aws.ec2_security_group:
+         name: Demo-rds-SG
+         description: Demo-rds-SG
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         region: ap-south-1
+         rules:
+           - proto: tcp
+             from_port: 3306
+             to_port: 3306
+             cidr_ip: 0.0.0.0/0
+       register: rds_sg_result
+
+     - name: Create a target group
+       community.aws.elb_target_group:
+         name: Demo-tg
+         protocol: http
+         target_type: instance
+         region: ap-south-1
+         port: 80
+         vpc_id: "{{ vpc_result.vpc.id }}"
+         state: present
+       
+
+     - name: Creating Load Balancer
+       amazon.aws.elb_application_lb:
+         name: Demoapplicationlb
+         state: present
+         region: ap-south-1
+         listeners:
+           - Protocol: HTTP
+             Port: 80
+             DefaultActions:
+               - Type: forward
+                 TargetGroupName: Demo-tg
+         tags: 
+           name: Demoapplicationlb
+         security_groups: Demo-Web-Server-SG
+         subnets:
+           - subnet-07b0df3d6fd64eb00
+           - subnet-0bd799fe99d70f586
+            
+
+    
