@@ -8,8 +8,6 @@
          region: ap-south-1
          state: present
          tenancy: default
-         aws_access_key: "AKIAQNO4WPHCHPWMJF4J"
-         aws_secret_key: "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"
        register: vpc_result
 
      - name: Create public subnet 1 in zone1
